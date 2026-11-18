@@ -1,0 +1,21 @@
+{
+  "input_file": "C:\\Users\\Sarthak jain\\Desktop\\major_project_phase_one\\data\\processed\\phase2\\features_clean_v2.parquet",
+  "train_ratio": 0.7,
+  "validation_ratio": 0.15,
+  "test_ratio": 0.15000000000000005,
+  "full_start": "2021-05-08 18:00:00",
+  "full_end": "2026-09-02 06:00:00",
+  "train_start": "2021-05-08 18:00:00",
+  "train_end": "2024-08-24 06:00:00",
+  "validation_start": "2024-08-24 12:00:00",
+  "validation_end": "2025-03-07 12:00:00",
+  "test_start": "2025-03-07 18:00:00",
+  "test_end": "2026-09-02 06:00:00",
+  "n_train": 2868378,
+  "n_validation": 614215,
+  "n_test": 614535,
+  "n_stations_train": 1006,
+  "n_stations_validation": 1005,
+  "n_stations_test": 1281,
+  "chronological_validation": "PASSED"
+}

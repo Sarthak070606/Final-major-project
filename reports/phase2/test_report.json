@@ -1,0 +1,10 @@
+{
+    "selected_model": "random_forest",
+    "test_metrics": {
+        "mae": 37454038.635557614,
+        "rmse": 14680536721.653873,
+        "r2": -6.508982817621245e-06,
+        "n": 614535
+    },
+    "forecast_horizon": "Next available observation; not guaranteed to be exactly six hours."
+}
