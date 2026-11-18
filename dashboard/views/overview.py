@@ -1,4 +1,3 @@
-"""Overview Dashboard page."""
 
 from __future__ import annotations
 
@@ -11,113 +10,338 @@ import plotly.graph_objects as go
 from dashboard.utils import data_loader as dl
 
 
+def get_observation_count(summary, yearly):
+    """Get total historical observations from available analytics data."""
+
+    possible_keys = [
+        "n_observations",
+        "total_observations",
+        "observation_count",
+        "total_records",
+        "n_records"
+    ]
+
+    # First: Check Phase 3 summary
+    if isinstance(summary, dict):
+        for key in possible_keys:
+            value = summary.get(key)
+
+            if value is not None:
+                try:
+                    value = int(float(value))
+                    if value >= 0:
+                        return value
+                except (ValueError, TypeError, OverflowError):
+                    pass
+
+    # Second: Check yearly summary for observation counts
+    if yearly is not None and not yearly.empty:
+        count_columns = [
+            "n_observations",
+            "total_observations",
+            "observation_count",
+            "n_records",
+            "count"
+        ]
+
+        for col in count_columns:
+            if col in yearly.columns:
+                counts = pd.to_numeric(
+                    yearly[col], errors="coerce"
+                )
+
+                if counts.notna().any():
+                    return int(counts.sum())
+
+    # No reliable historical count available
+    return None
+
+
 def render():
-    st.markdown('<div class="page-title">Overview Dashboard</div>', unsafe_allow_html=True)
+
+    # -------------------------------------------------
+    # PAGE HEADER
+    # -------------------------------------------------
+
     st.markdown(
-        '<div class="page-subtitle">Madhya Pradesh Groundwater Monitoring Summary</div>',
-        unsafe_allow_html=True,
+        '<div class="page-title">Overview Dashboard</div>',
+        unsafe_allow_html=True
     )
 
-    hero_path = dl.cfg.PROJECT_ROOT / "dashboard" / "assets" / "groundwater_hero.svg"
+    st.markdown(
+        '<div class="page-subtitle">'
+        'Madhya Pradesh Groundwater Monitoring Summary'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # -------------------------------------------------
+    # HERO IMAGE
+    # -------------------------------------------------
+
+    hero_path = (
+        dl.cfg.PROJECT_ROOT
+        / "dashboard"
+        / "assets"
+        / "groundwater_hero.svg"
+    )
+
     if hero_path.exists():
-        hero_b64 = base64.b64encode(hero_path.read_bytes()).decode("ascii")
+
+        hero_b64 = base64.b64encode(
+            hero_path.read_bytes()
+        ).decode("ascii")
+
         st.markdown(
             f'<img src="data:image/svg+xml;base64,{hero_b64}" '
-            'style="width:100%;height:auto;border-radius:18px;margin:.2rem 0 1rem;" '
+            'style="width:100%;height:auto;border-radius:18px;'
+            'margin:.2rem 0 1rem;" '
             'alt="MP Groundwater Intelligence banner">',
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
 
-    latest = dl.load_latest_readings()
-    yearly = dl.load_yearly_summary()
-    district = dl.load_district_summary()
-    summary = dl.load_phase3_summary()
+    # -------------------------------------------------
+    # LOAD DATA
+    # -------------------------------------------------
 
-    # ---- KPI row ----
-    c1, c2, c3, c4 = st.columns(4)
+    try:
+        latest = dl.load_latest_readings()
+        yearly = dl.load_yearly_summary()
+        district = dl.load_district_summary()
+        summary = dl.load_phase3_summary()
 
-    n_stations = latest["station"].nunique() if latest is not None and "station" in latest.columns else "—"
-    n_districts = (
-        latest["district"].nunique()
-        if latest is not None and "district" in latest.columns
-        else "—"
-    )
-    n_obs = summary.get("n_observations", "—") if summary else "—"
-    latest_date = summary.get("latest_date", "—") if summary else "—"
+    except Exception as e:
+        st.error(f"Error loading dashboard data: {e}")
+        return
+
+    # -------------------------------------------------
+    # KPI CALCULATIONS
+    # -------------------------------------------------
+
+    n_stations = 0
+    n_districts = 0
+
+    if latest is not None and not latest.empty:
+
+        if "station" in latest.columns:
+            n_stations = latest["station"].nunique()
+
+        if "district" in latest.columns:
+            n_districts = latest["district"].nunique()
+
+    # Correct total historical observation count
+    n_obs = get_observation_count(summary, yearly)
+
+    # Latest observation date
+    latest_date = "—"
 
     if latest is not None and "datetime" in latest.columns:
-        latest_date = str(pd.to_datetime(latest["datetime"]).max().date())
 
-    c1.metric("Monitoring Stations", n_stations)
-    c2.metric("Districts Covered", n_districts)
-    c3.metric("Total Observations", n_obs if isinstance(n_obs, str) else f"{n_obs:,}")
-    c4.metric("Latest Observation", latest_date)
+        dates = pd.to_datetime(
+            latest["datetime"],
+            errors="coerce"
+        ).dropna()
+
+        if not dates.empty:
+            latest_date = str(dates.max().date())
+
+    elif isinstance(summary, dict):
+        latest_date = str(
+            summary.get("latest_date", "—")
+        )
+
+    # -------------------------------------------------
+    # KPI DISPLAY
+    # -------------------------------------------------
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "Monitoring Stations",
+        f"{n_stations:,}"
+    )
+
+    c2.metric(
+        "Districts Covered",
+        f"{n_districts:,}"
+    )
+
+    c3.metric(
+        "Total Observations",
+        f"{n_obs:,}" if n_obs is not None else "—"
+    )
+
+    c4.metric(
+        "Latest Observation",
+        latest_date
+    )
+
+    if n_obs is None:
+        st.caption(
+            "Total observation count is unavailable. "
+            "Check the Phase 3 summary or yearly analytics "
+            "for historical observation counts."
+        )
 
     st.markdown("---")
 
-    # ---- Latest groundwater statistics ----
+    # -------------------------------------------------
+    # LATEST GROUNDWATER STATISTICS
+    # -------------------------------------------------
+
     if latest is not None and "wl_raw" in latest.columns:
-        st.subheader("Latest Groundwater-Level Statistics")
-        wl = latest["wl_raw"].dropna()
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Median (m)", f"{wl.median():.2f}")
-        k2.metric("Mean (m)", f"{wl.mean():.2f}")
-        k3.metric("Min (m)", f"{wl.min():.2f}")
-        k4.metric("Max (m)", f"{wl.max():.2f}")
 
-        st.caption(
-            "Values are the signed CGWB telemetry readings (metres). "
-            "A high proportion of negative values is common in the published data; "
-            "the measurement convention should be verified against official CGWB documentation."
+        st.subheader(
+            "Latest Groundwater-Level Statistics"
         )
+
+        wl = pd.to_numeric(
+            latest["wl_raw"],
+            errors="coerce"
+        ).dropna()
+
+        if not wl.empty:
+
+            k1, k2, k3, k4 = st.columns(4)
+
+            k1.metric(
+                "Median (m)",
+                f"{wl.median():.2f}"
+            )
+
+            k2.metric(
+                "Mean (m)",
+                f"{wl.mean():.2f}"
+            )
+
+            k3.metric(
+                "Min (m)",
+                f"{wl.min():.2f}"
+            )
+
+            k4.metric(
+                "Max (m)",
+                f"{wl.max():.2f}"
+            )
+
+            st.caption(
+                "Values are the signed CGWB telemetry readings "
+                "(metres). A high proportion of negative values "
+                "is common in the published data; the measurement "
+                "convention should be verified against official "
+                "CGWB documentation."
+            )
+
+        else:
+            st.info("No valid groundwater-level readings found.")
+
     else:
-        st.info("Latest station readings file not found. Run Phase 3 analytics first.")
-
-    # ---- Year-wise trend ----
-    if yearly is not None and {"year", "wl_mean"}.issubset(yearly.columns):
-        st.subheader("Year-wise Mean Groundwater Level")
-        agg = yearly.groupby("year", as_index=False)["wl_mean"].mean()
-        fig = px.line(
-            agg, x="year", y="wl_mean",
-            markers=True,
-            labels={"wl_mean": "Mean wl_raw (m)", "year": "Year"},
-            template="plotly",
+        st.info(
+            "Latest station readings file not found. "
+            "Run Phase 3 analytics first."
         )
+
+    # -------------------------------------------------
+    # YEAR-WISE TREND
+    # -------------------------------------------------
+
+    if (
+        yearly is not None
+        and not yearly.empty
+        and {"year", "wl_mean"}.issubset(yearly.columns)
+    ):
+
+        st.subheader(
+            "Year-wise Mean Groundwater Level"
+        )
+
+        agg = yearly.groupby(
+            "year",
+            as_index=False
+        )["wl_mean"].mean()
+
+        fig = px.line(
+            agg,
+            x="year",
+            y="wl_mean",
+            markers=True,
+            labels={
+                "wl_mean": "Mean wl_raw (m)",
+                "year": "Year"
+            },
+            template="plotly"
+        )
+
         fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             margin=dict(t=30, b=40),
-            height=360,
+            height=360
         )
-        st.plotly_chart(fig, use_container_width=True)
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
     else:
         st.info("Yearly summary not available.")
 
-    # ---- District distribution ----
-    if latest is not None and "district" in latest.columns:
+    # -------------------------------------------------
+    # DISTRICT DISTRIBUTION
+    # -------------------------------------------------
+
+    if (
+        latest is not None
+        and not latest.empty
+        and {"district", "station"}.issubset(latest.columns)
+    ):
+
         st.subheader("Stations per District")
-        counts = latest.groupby("district")["station"].nunique().sort_values(ascending=False).reset_index()
-        counts.columns = ["District", "Stations"]
+
+        counts = (
+            latest.groupby("district")["station"]
+            .nunique()
+            .sort_values(ascending=False)
+            .reset_index()
+        )
+
+        counts.columns = [
+            "District",
+            "Stations"
+        ]
+
         top_counts = counts.head(20)
 
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(
-            x=top_counts["District"],
-            y=top_counts["Stations"],
-            marker=dict(
-                color=top_counts["Stations"],
-                colorscale="Teal",
-                showscale=True,
-                colorbar=dict(title="Stations"),
-            ),
-            name="Stations",
-        ))
+
+        fig2.add_trace(
+            go.Bar(
+                x=top_counts["District"],
+                y=top_counts["Stations"],
+                marker=dict(
+                    color=top_counts["Stations"],
+                    colorscale="Teal",
+                    showscale=True,
+                    colorbar=dict(title="Stations")
+                ),
+                name="Stations"
+            )
+        )
+
         fig2.update_layout(
             template="plotly_white",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             margin=dict(t=30, b=80),
             height=400,
-            xaxis_tickangle=-40,
+            xaxis_tickangle=-40
         )
-        st.plotly_chart(fig2, use_container_width=True)
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+    else:
+        st.info("District distribution data not available.")
