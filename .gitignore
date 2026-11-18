@@ -21,3 +21,5 @@ secrets.toml
 *.zip
 *.logc
 data/raw/gwl_tel_6_hourly_madhya_pradesh_gw_mp_2021_2025.csv
+
+data/raw/gwl_tel_6_hourly_madhya_pradesh_gw_mp_2021_2025.csv
